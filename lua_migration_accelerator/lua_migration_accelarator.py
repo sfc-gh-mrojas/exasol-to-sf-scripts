@@ -82,20 +82,20 @@ Following a pattern like
 CREATE OR REPLACE PROCEDURE MYPROC(ARG1 STRING, ARG2 STRING)
   RETURNS STRING
   LANGUAGE PYTHON
-  RUNTIME_VERSION = '3.11
-  PACKAGES = ('snowflake-python-snowpark')
-  HANDLER = 'main
+  RUNTIME_VERSION = '3.11'
+  PACKAGES = ('snowflake-snowpark-python')
+  HANDLER = 'main'
   EXECUTE AS CALLER
   AS
   $$
-    from snowflake.snowpark import Session
+from snowflake.snowpark import Session
 
-    def main(session: Session, arg1: str, arg2: str) -> str:
-		# Your code here
-		# You can use session.sql to execute SQL commands
-		# For example:
-		result = session.sql("SELECT * FROM my_table").collect()
-		return str(result)
+def main(session: Session, arg1: str, arg2: str) -> str:
+    # Your code here
+    # You can use session.sql to execute SQL commands
+    # For example:
+    result = session.sql("SELECT * FROM my_table").collect()
+    return str(result)
   $$;
 
 call to pquery or query can be replaced by session.sql. 
@@ -124,6 +124,22 @@ def determine_script_type(lines):
 
 def reset_update_key():
     st.session_state.uploader_key += 1
+
+def decode_with_fallback(byte_content: bytes) -> str:
+    """
+    Decode bytes to string with encoding fallback for non-UTF-8 files.
+    Tries multiple encodings and falls back to replacement characters if all fail.
+    """
+    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+    
+    for encoding in encodings_to_try:
+        try:
+            return byte_content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    
+    # Last resort: decode with replacement characters
+    return byte_content.decode('utf-8', errors='replace')
     
 def get_stages():
     return [x[0] for x in get_active_session().sql("show stages").select('"name"').collect()]
@@ -193,7 +209,8 @@ def file_viewer():
             
             for row in st.session_state.selected_files.itertuples():
                 file_name = row[2]
-                input_files[file_name] = get_active_session().file.get_stream('@' + file_name).read().decode('utf-8')
+                file_bytes = get_active_session().file.get_stream('@' + file_name).read()
+                input_files[file_name] = decode_with_fallback(file_bytes)
             st.session_state.input_files = input_files
 
         if st.button("Migrate"):
@@ -214,7 +231,11 @@ def file_viewer():
                             response_rows = get_active_session().sql("select SNOWFLAKE.CORTEX.COMPLETE('mistral-large2',?)", params=[prompt]).collect()
                             response = response_rows[0][0] if response_rows else "No response received."
                             output_files[file_name] = response
-                    st.write(output_files.get(file_name,"no results"))
+                    migrated_code = output_files.get(file_name, "")
+                    if migrated_code:
+                        st.code(migrated_code, language="python")
+                    else:
+                        st.info("Click 'Migrate' to convert this script to Snowpark Python.")
 
 
 with st.sidebar:

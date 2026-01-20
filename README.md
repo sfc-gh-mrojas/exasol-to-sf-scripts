@@ -29,6 +29,8 @@ The script applies the following syntax conversions:
 ### Data Types
 - `VARCHAR(n) UTF8` → `VARCHAR(n)` (removes UTF8 encoding specification)
 - `CAST('hexvalue' AS HASHTYPE)` → `TO_BINARY('hexvalue', 'HEX')`
+- `HASH(n)` → `BINARY(n)` (converts HASH data type)
+- `HASHTYPE` → `BINARY` (converts HASHTYPE data type)
 
 ### Comments
 - `comment is 'text',` → `COMMENT 'text',`
@@ -177,7 +179,7 @@ python exasol_snowflake_migration.py /path/to/views --patterns "my_view_*.sql" "
 ### Common Issues
 
 1. **Permission Errors**: Ensure you have read/write access to the target directory
-2. **File Encoding**: The script assumes UTF-8 encoding
+2. **File Encoding**: The script supports multiple encodings (UTF-8, Latin-1, CP1252, ISO-8859-1, UTF-16) with automatic fallback
 3. **Large Files**: Very large files may take longer to process
 4. **Pattern Matching**: Use quotes around patterns that contain special characters
 

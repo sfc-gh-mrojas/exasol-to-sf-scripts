@@ -132,6 +132,18 @@ def get_transformation_patterns() -> List[Tuple[str, str, str]]:
             "Convert CAST AS HASHTYPE to TO_BINARY with HEX"
         ),
         
+        # HASH DATA TYPE - Convert HASH to BINARY
+        (
+            r'\bHASH\s*\(\s*(\d+)\s*\)',
+            r'BINARY(\1)',
+            "Convert HASH(n) data type to BINARY(n)"
+        ),
+        (
+            r'\bHASHTYPE\b',
+            r'BINARY',
+            "Convert HASHTYPE data type to BINARY"
+        ),
+        
         # REMOVE LOCAL. references (case sensitive and case insensitive)
         (
             r'\bLOCAL\.',
@@ -181,6 +193,7 @@ def apply_transformations(content: str, verbose: bool = False) -> Tuple[str, Lis
     else:   
         if verbose:
             print("  No final comment changes needed")
+    
     return transformed_content, applied_transformations
 
 
@@ -228,9 +241,26 @@ def process_file(file_path: str, backup: bool = True, verbose: bool = False) -> 
         Tuple of (was_modified, status_message, applied_transformations)
     """
     try:
-        # Read the original file
-        with open(file_path, 'r', encoding='utf-8') as f:
-            original_content = f.read()
+        # Read the original file with encoding fallback for non-UTF-8 files
+        original_content = None
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+        used_encoding = 'utf-8'
+        
+        for encoding in encodings_to_try:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    original_content = f.read()
+                used_encoding = encoding
+                break
+            except UnicodeDecodeError:
+                continue
+        
+        if original_content is None:
+            # Last resort: read with errors='replace' to handle any encoding
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                original_content = f.read()
+            if verbose:
+                print(f"  Warning: File encoding issues detected, using replacement characters")
         
         # Apply transformations
         transformed_content, applied_transformations = apply_transformations(original_content, verbose)
@@ -313,8 +343,24 @@ def analyze_file_for_dry_run(file_path: str, verbose: bool = False) -> Tuple[boo
         Tuple of (would_be_modified, status_message, potential_transformations)
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Read the file with encoding fallback for non-UTF-8 files
+        content = None
+        encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+        
+        for encoding in encodings_to_try:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    content = f.read()
+                break
+            except UnicodeDecodeError:
+                continue
+        
+        if content is None:
+            # Last resort: read with errors='replace' to handle any encoding
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            if verbose:
+                print(f"  Warning: File encoding issues detected, using replacement characters")
         
         transformed_content, applied_transformations = apply_transformations(content, verbose)
         
